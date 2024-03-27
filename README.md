@@ -13,10 +13,9 @@ The MATLAB code will chew through these DICOM stacks and ask for
 	
 The scan 1, 2, and difference figures can be navigated by slice #
 
-The BV, BMC, BMD variables are tables that report TOTAL bone volume,
-	bone mineral content, and bone mineral density in the anterior
-	medial, anterior lateral, posterior medial, and posterior lateral 
-	quadrants, respectively.
+The TV, BV, BMC, BMD variables are tables that report total volume,
+	bone volume, bone mineral content, and bone mineral density in the 
+	anterior, medial, lateral, and posterior quadrants, respectively.
 	
 Voxel resolution should be changed in the code if necessary, 
 and the calibration slope and intercept should be machine-specific.
