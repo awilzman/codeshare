@@ -35,8 +35,8 @@ output = [labels,output];
 % Export to Excel
 excelFileName = 'output.xlsx';
 for j = 2:length(subjects)+1
-    writematrix(output{1, j}, excelFileName, 'Sheet', 1, 'Range', ['A' num2str(6*j-5)]);
+    writematrix(output{1, j}, excelFileName, 'Sheet', 1, 'Range', ['A' num2str(18*(j-1))]);
     for i = 2:5
-        writematrix(output{i, j}, excelFileName, 'Sheet', 1, 'Range', ['A' num2str(6*j-7+(i-1)*4) ':' 'F' num2str(6*j-3+(i-1)*4)]);
+        writematrix(output{i, j}, excelFileName, 'Sheet', 1, 'Range', ['A' num2str((18*(j-1))+(i-2)*4) ':' 'E' num2str((18*(j-1))+(i-2)*4);
     end
 end
