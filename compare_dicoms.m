@@ -344,6 +344,10 @@ function [tv, bv, bmc, bmd] = bv_bmc(mask, res, slope, int)
         area = area * vox_ed^2;
         vol = area * vox_ed;
         bv_vol = sum(sum(slice>1))*vox_ed^3;
+        if (bv_vol == 0)
+            continue
+        end
+
         slice_density = mean(mean(slice(slice>1))) * slope + int;
         slice_content = slice_density * bv_vol;
         slice_density = slice_content / vol;
