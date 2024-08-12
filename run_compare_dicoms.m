@@ -23,7 +23,7 @@ columns = ["Anterior","Posterior","Medial","Lateral"];
 rows = ["";"Scan 1";"Scan 2";"Difference"];
 for i=1:length(output)
     [output{2,i},output{3,i},output{4,i},output{5,i}] = compare_dicoms(directory, ...
-        res,output{1,i},mask1s{i},mask2s{i},calibrate_slope,calibrate_int);
+        res,output{1,i} ,mask1s{i},mask2s{i},calibrate_slope,calibrate_int);
     for j=2:5
         output{j,i} = cat(1,columns,output{j,i});
         output{j,i} = cat(2,rows,output{j,i});

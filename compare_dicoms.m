@@ -68,24 +68,79 @@ function [tv, bv, bmc, bmd] = compare_dicoms(default_directory,res, ...
             end
         end
     end
-    
+
     % View scans and choose directions
     graphfig = uifigure;
     figure(graphfig)
     colormap('hot');
-    imagesc(mask_LCV(:,:,round(size(mask_LCV,3)/2)));
+    slice_image = mask_LCV(:,:,round(size(mask_LCV,3)/2));
+    imagesc(slice_image);
     axis image
     title('LCV')
-    uialert(graphfig,'Please choose two points that represent the Anterior-Posterior axis', ...
-        'Hello friend',Icon='info');
-    movegui(graphfig,'east');
-    [ap_x,ap_y] = ginput(2);
+    uialert(graphfig, 'Please choose two points that represent the Anterior-Posterior axis', ...
+        'Hello friend', Icon='info');
+    movegui(graphfig, 'east');
+    retry = true;
+    while retry
+        % Get user input for the Anterior-Posterior axis
+        [ap_x, ap_y] = ginput(2);
+        
+        % Compute the slope of the line
+        ap_slope = (ap_y(2) - ap_y(1)) / (ap_x(2) - ap_x(1));
+        
+        % Calculate the centroid of the bone (assuming non-zero pixels represent the bone)
+        props = regionprops(slice_image > 0, 'Centroid');
+        centroid = props.Centroid;
+        % Define the endpoints of the line in terms of x (from left to right)
+        x1 = 1;
+        y1 = centroid(2) + ap_slope * (x1 - centroid(1));
+        x2 = size(slice_image, 2);
+        y2 = centroid(2) + ap_slope * (x2 - centroid(1));
     
-    % global origin is at top left of slice viewer, so ys are negated 
-    ap_y = - ap_y;
-    ap_slope = (ap_y(2)-ap_y(1))/(ap_x(2)-ap_x(1));
+        % Ensure the line stays within the image boundaries
+        if y1 < 1
+            y1 = 1;
+            x1 = centroid(1) - (centroid(2) - y1) / ap_slope;
+        elseif y1 > size(slice_image, 1)
+            y1 = size(slice_image, 1);
+            x1 = centroid(1) - (centroid(2) - y1) / ap_slope;
+        end
+    
+        if y2 < 1
+            y2 = 1;
+            x2 = centroid(1) - (centroid(2) - y2) / ap_slope;
+        elseif y2 > size(slice_image, 1)
+            y2 = size(slice_image, 1);
+            x2 = centroid(1) - (centroid(2) - y2) / ap_slope;
+        end
+    
+        % Create a mask for the line
+        [rows, cols] = size(slice_image);
+        [xGrid, yGrid] = meshgrid(1:cols, 1:rows);
+        line_mask = abs(yGrid - (ap_slope * (xGrid - centroid(1)) + centroid(2))) < 1;  % Thickness of 1 pixel
+    
+        % Modify the image by setting the line pixels to white
+        new_slice_img = slice_image;
+        new_slice_img(line_mask) = max(slice_image(:)); % Set the line to the max intensity value
+    
+        % Display the modified image
+        imagesc(new_slice_img);
+        axis image;
+    
+        % Ask the user if they are satisfied with the axis
+        choice = questdlg('Are you satisfied with the axis?', ...
+            'Confirm Axis', 'Yes', 'No', 'Yes');
+    
+        % If the user is satisfied, exit the loop
+        if strcmp(choice, 'Yes')
+            retry = false;
+        else
+            % Reset the image if retrying
+            imagesc(slice_image);
+        end
+    end
+    
     close(graphfig);
-    
     % Set origins, defined by geometric centroid (not density-weighted)
     origins = zeros(3,1);
     count = 0;
@@ -103,9 +158,9 @@ function [tv, bv, bmc, bmd] = compare_dicoms(default_directory,res, ...
     end
     origins = origins / count;
     % rotate masks as defined
-    angle = acot(ap_slope);
-    if ap_y(1) < ap_y(2)
-        angle = angle - pi();
+    angle = atan(-ap_slope);
+    if ap_y(2) - ap_y(1) < 0
+        angle = angle + pi();
     end
     % Rotate mask to set anterior in quadrant 1
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -120,7 +175,6 @@ function [tv, bv, bmc, bmd] = compare_dicoms(default_directory,res, ...
     %                    #
     %                    #
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-    angle = angle - (pi()/4); 
     mask_1 = rotate_mask(mask_1,angle,origins);
     mask_2 = rotate_mask(mask_2,angle,origins);
     mask_LCV = rotate_mask(mask_LCV,angle,origins);
