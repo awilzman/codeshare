@@ -13,27 +13,25 @@
 % Updated ARW 09/29/23
 % Updated ARW 11/01/23
 % Updated ARW 01/15/24
+% Updated ARW 08/30/24
 % calibrate_slope = 0.00035619;
 % calibrate_int = -0.00365584; %
 % [bv,bmc,bmd] = compare_dicoms(default_directory,res,LCV_name,mask1_name,mask2_name,calibrate_slope,calibrate_int)
-
 
 % T. Hildebrand, A. Laib, R. Müller, J. Dequecker, P. Rüegsegger. 
 % Direct 3-D morphometric analysis of human cancellous bone: 
 % microstructural data from spine, femur, iliac crest and calcaneus. 
 % J Bone Miner Res 1999;14(7):1167-74.
-% MARA14 LCV volume = 6.743 cm^3
 function [tv, bv, bmc, bmd] = compare_dicoms(default_directory,res, ...
     LCV_name,mask1_name,mask2_name,calibrate_slope,calibrate_int, ...
-    baseline,first_full_slice)
+    first_full_slice)
 
     %res in um, voxel edge length
+
     if nargin < 8
-        baseline = 10;
-        first_full_slice = 30;
-    elseif nargin < 9
         first_full_slice = 30;
     end
+
     mask_LCV = get_mask(LCV_name,default_directory);
     mask_1 = get_mask(mask1_name,default_directory);
     mask_2 = get_mask(mask2_name,default_directory);
@@ -43,31 +41,14 @@ function [tv, bv, bmc, bmd] = compare_dicoms(default_directory,res, ...
     mask_1 = pad_3dmat(mask_1);
     mask_2 = pad_3dmat(mask_2);
     
-    % Zero all values in mask_1 and mask_2 that correspond to 0 elements in
-    % mask_LCV
-    for i = 1:size(mask_LCV,3) 
-        for j = 1:size(mask_LCV,1)
-            for k = 1:size(mask_LCV,2)
-                if mask_LCV(j,k,i) == 0
-                    mask_1(j,k,i) = 0; % Set corresponding elements in mask_1 to 0
-                    mask_2(j,k,i) = 0; % Set corresponding elements in mask_2 to 0
-                end
-            end
-        end
-    end
+    idx = mask_LCV == 0;
+    mask_1(idx) = 0;
+    mask_2(idx) = 0;
 
-    % Fill LCV by including all values that exist above a threshold in scans 1 and 2
-    for i = 1:size(mask_LCV,3) 
-        for j = 1:size(mask_LCV,1)
-            for k = 1:size(mask_LCV,2)
-                if mask_LCV(j,k,i) == 0
-                    if mask_1(j,k,i) > baseline || mask_2(j,k,i) > baseline
-                        mask_LCV(j,k,i) = 127;
-                    end
-                end
-            end
-        end
-    end
+    non_zero_voxels = mask_LCV > 0;
+    [rows, cols, ~] = ndgrid(1:size(mask_LCV, 1), 1:size(mask_LCV, 2), 1:size(mask_LCV, 3));
+    x = mean(rows(non_zero_voxels));
+    y = mean(cols(non_zero_voxels));
 
     % View scans and choose directions
     graphfig = uifigure;
@@ -84,50 +65,19 @@ function [tv, bv, bmc, bmd] = compare_dicoms(default_directory,res, ...
     while retry
         % Get user input for the Anterior-Posterior axis
         [ap_x, ap_y] = ginput(2);
-        
         % Compute the slope of the line
         ap_slope = (ap_y(2) - ap_y(1)) / (ap_x(2) - ap_x(1));
-        
-        % Calculate the centroid of the bone (assuming non-zero pixels represent the bone)
-        props = regionprops(slice_image > 0, 'Centroid');
-        centroid = props.Centroid;
-        % Define the endpoints of the line in terms of x (from left to right)
-        x1 = 1;
-        y1 = centroid(2) + ap_slope * (x1 - centroid(1));
-        x2 = size(slice_image, 2);
-        y2 = centroid(2) + ap_slope * (x2 - centroid(1));
-    
-        % Ensure the line stays within the image boundaries
-        if y1 < 1
-            y1 = 1;
-            x1 = centroid(1) - (centroid(2) - y1) / ap_slope;
-        elseif y1 > size(slice_image, 1)
-            y1 = size(slice_image, 1);
-            x1 = centroid(1) - (centroid(2) - y1) / ap_slope;
-        end
-    
-        if y2 < 1
-            y2 = 1;
-            x2 = centroid(1) - (centroid(2) - y2) / ap_slope;
-        elseif y2 > size(slice_image, 1)
-            y2 = size(slice_image, 1);
-            x2 = centroid(1) - (centroid(2) - y2) / ap_slope;
-        end
     
         % Create a mask for the line
         [rows, cols] = size(slice_image);
         [xGrid, yGrid] = meshgrid(1:cols, 1:rows);
-        line_mask = abs(yGrid - (ap_slope * (xGrid - centroid(1)) + centroid(2))) < 1;  % Thickness of 1 pixel
-    
-        % Modify the image by setting the line pixels to white
+        line_mask = abs(yGrid - (ap_slope * (xGrid - x) + y)) < 1; 
         new_slice_img = slice_image;
-        new_slice_img(line_mask) = max(slice_image(:)); % Set the line to the max intensity value
+        new_slice_img(line_mask) = max(slice_image(:)); 
     
         % Display the modified image
         imagesc(new_slice_img);
         axis image;
-    
-        % Ask the user if they are satisfied with the axis
         choice = questdlg('Are you satisfied with the axis?', ...
             'Confirm Axis', 'Yes', 'No', 'Yes');
     
@@ -141,27 +91,14 @@ function [tv, bv, bmc, bmd] = compare_dicoms(default_directory,res, ...
     end
     
     close(graphfig);
-    % Set origins, defined by geometric centroid (not density-weighted)
-    origins = zeros(3,1);
-    count = 0;
-    for i = 1:size(mask_LCV,3) %z
-        for j = 1:size(mask_LCV,1) %y
-            for k = 1:size(mask_LCV,2) %x
-                if mask_LCV(j,k,i) > 0
-                    origins(1) = origins(1) + k;
-                    origins(2) = origins(2) + j;
-                    origins(3) = origins(3) + i;
-                    count = count + 1;
-                end
-            end
-        end
+
+    angle_ap = atan2(-ap_slope, 1);
+    if ap_y(2) < ap_y(1)
+        angle_ap = angle_ap + pi();
     end
-    origins = origins / count;
-    % rotate masks as defined
-    angle = atan(-ap_slope);
-    if ap_y(2) - ap_y(1) < 0
-        angle = angle + pi();
-    end
+    tangle = pi()/4;
+    angle = angle_ap - tangle;
+
     % Rotate mask to set anterior in quadrant 1
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
     %                    #
@@ -175,10 +112,12 @@ function [tv, bv, bmc, bmd] = compare_dicoms(default_directory,res, ...
     %                    #
     %                    #
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-    mask_1 = rotate_mask(mask_1,angle,origins);
-    mask_2 = rotate_mask(mask_2,angle,origins);
-    mask_LCV = rotate_mask(mask_LCV,angle,origins);
     
+    centroid = [x,y];
+    mask_1 = rotate_mask(mask_1,angle,centroid);
+    mask_2 = rotate_mask(mask_2,angle,centroid);
+    mask_LCV = rotate_mask(mask_LCV,angle,centroid);
+
     % View scan and choose medial side
     graphfig = uifigure;
     figure(graphfig)
@@ -189,25 +128,29 @@ function [tv, bv, bmc, bmd] = compare_dicoms(default_directory,res, ...
     uialert(graphfig,'Now click on the medial side', ...
         'almost there!',Icon='success');
     movegui(graphfig,'east');
-    [med_x,] = ginput(1);    
-    %Calculate the differences in masks, 
-    % set any points outside of LCV to 0
+    [med_x,] = ginput(1);
+
     mask_diff = mask_2 - mask_1;
     min_original = min(mask_diff(:));
     max_original = max(mask_diff(:));
     desired_min = 0;
     desired_max = 255;
-    normalized_matrix = (mask_diff - min_original) / (max_original - min_original) * (desired_max - desired_min) + desired_min;
-    normalized_matrix(mask_diff == 0) = 127;
-    normalized_matrix = max(min(normalized_matrix, 255), 0);
+    nm = (mask_diff - min_original) / (max_original - min_original) * (desired_max - desired_min) + desired_min;
+    nm(mask_diff == 0) = 127;
+    nm = max(min(nm, 255), 0);
     
-    mask_1 = uint16(mask_1);
-    mask_2 = uint16(mask_2);
-    mask_LCV = uint16(mask_LCV);
+    mask_1 = int16(mask_1);
+    mask_2 = int16(mask_2);
+    mask_LCV = int16(mask_LCV);
     mask_1 = pad_3dmat(mask_1);
     mask_2 = pad_3dmat(mask_2);
     mask_LCV = pad_3dmat(mask_LCV);
-    normalized_matrix = pad_3dmat(normalized_matrix);
+    nm = pad_3dmat(nm);
+
+    non_zero_voxels = mask_LCV > 0;
+    [rows, cols, ~] = ndgrid(1:size(mask_LCV, 1), 1:size(mask_LCV, 2), 1:size(mask_LCV, 3));
+    x = mean(rows(non_zero_voxels));
+    y = mean(cols(non_zero_voxels));
     
     if med_x < size(mask_LCV,2)
         medial_left = true;
@@ -224,7 +167,7 @@ function [tv, bv, bmc, bmd] = compare_dicoms(default_directory,res, ...
     title('Scan 2')
     movegui('south');
     figure()
-    sliceViewer(normalized_matrix)
+    sliceViewer(nm)
     title('Difference')
     movegui('east');
     
@@ -244,14 +187,13 @@ function [tv, bv, bmc, bmd] = compare_dicoms(default_directory,res, ...
     mask_2_ant = zeros(size(mask_2, 1),size(mask_2, 2),slices);
     mask_2_post = zeros(size(mask_2, 1),size(mask_2, 2),slices);
     mask_2_lat = zeros(size(mask_2, 1),size(mask_2, 2),slices);
-
+    
     % Split up the masks based on anterior/posterior/medial/lateral
+    x = uint16(x);
+    y = uint16(y);
     if medial_left %medial in quadrant 2
         for z = 1:slices
             zs = z+(size(mask_1,3)-slices);
-            y = round(origins(2));
-            x = round(origins(1));
-
             mask_1_med(1:y,1:x,z) = mask_1(1:y,1:x,zs);
             mask_1_ant(1:y,x+1:end,z) = mask_1(1:y,x+1:end,zs);
             mask_1_post(1+y:end,1:x,z) = mask_1(1+y:end,1:x,zs);
@@ -294,8 +236,6 @@ function [tv, bv, bmc, bmd] = compare_dicoms(default_directory,res, ...
     else %lateral in quadrant 2
         for z = 1:slices
             zs = z+(size(mask_1,3)-slices);
-            y = round(origins(2));
-            x = round(origins(1));
             x_neg = find(mask_2(y+1,:,z) > 0,1,'first');
             x_pos = find(mask_2(y+1,:,z) > 0,1,'last');
             y_top = find(mask_2(:,x+1,z) > 0,1,'first');
@@ -414,7 +354,7 @@ function [tv, bv, bmc, bmd] = bv_bmc(mask, res, slope, int)
     bmd = bmd / size(mask,3);
 end
 
-function [new_mask] = rotate_mask(mask, rotationAngle, origins, interpolationMethod)
+function [new_mask] = rotate_mask(mask, rotationAngle, centroid, interpolationMethod)
     % Input validation
     assert(isnumeric(mask) && ndims(mask) >= 2, 'Input mask must be a numeric 2D or 3D array.');
     assert(isscalar(rotationAngle), 'Rotation angle must be a scalar.');
@@ -431,14 +371,14 @@ function [new_mask] = rotate_mask(mask, rotationAngle, origins, interpolationMet
     mask = padarray(mask, [pad_TB, pad_LR], 0, 'both');
     % Initialize the result
     new_mask = zeros(size(mask));    
-    origins(1) = origins(1) + pad_TB;
-    origins(2) = origins(2) + pad_LR;
+    centroid(1) = centroid(1) + pad_TB;
+    centroid(2) = centroid(2) + pad_LR;
     for channelIndex = 1:size(mask, 3)
         matrix = double(mask(:, :, channelIndex));
         [rows, cols] = size(matrix);        
         [x, y] = meshgrid(1:cols, 1:rows);
-        x = x - origins(1);
-        y = y - origins(2);        
+        x = x - centroid(1);
+        y = y - centroid(2);        
         x_rot = x * cos(rotationAngle) - y * sin(rotationAngle);
         y_rot = x * sin(rotationAngle) + y * cos(rotationAngle);        
         % Perform interpolation with specified method
