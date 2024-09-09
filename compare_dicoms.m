@@ -22,13 +22,13 @@
 % Direct 3-D morphometric analysis of human cancellous bone: 
 % microstructural data from spine, femur, iliac crest and calcaneus. 
 % J Bone Miner Res 1999;14(7):1167-74.
-function [tv, bv, bmc, bmd] = compare_dicoms(default_directory,res, ...
+function [tv, bv, bmc, bmd, ap_x, ap_y] = compare_dicoms(default_directory,res, ...
     LCV_name,mask1_name,mask2_name,calibrate_slope,calibrate_int, ...
-    first_full_slice)
+    sub_name,ap_x,ap_y,first_full_slice)
 
     %res in um, voxel edge length
 
-    if nargin < 8
+    if nargin < 11
         first_full_slice = 30;
     end
 
@@ -44,24 +44,44 @@ function [tv, bv, bmc, bmd] = compare_dicoms(default_directory,res, ...
     idx = mask_LCV == 0;
     mask_1(idx) = 0;
     mask_2(idx) = 0;
-
+    tangle = pi()/4;
+    
     non_zero_voxels = mask_LCV > 0;
     [rows, cols, ~] = ndgrid(1:size(mask_LCV, 1), 1:size(mask_LCV, 2), 1:size(mask_LCV, 3));
     x = mean(rows(non_zero_voxels));
     y = mean(cols(non_zero_voxels));
 
     % View scans and choose directions
-    graphfig = uifigure;
-    figure(graphfig)
-    colormap('hot');
+    
     slice_image = mask_LCV(:,:,round(size(mask_LCV,3)/2));
-    imagesc(slice_image);
-    axis image
-    title('LCV')
-    uialert(graphfig, 'Please choose two points that represent the Anterior-Posterior axis', ...
-        'Hello friend', Icon='info');
-    movegui(graphfig, 'east');
     retry = true;
+
+    ap_slope = (ap_y(2) - ap_y(1)) / (ap_x(2) - ap_x(1));
+
+    % Create a mask for the line
+    [rows, cols] = size(slice_image);
+    [xGrid, yGrid] = meshgrid(1:cols, 1:rows);
+    line_mask = abs(yGrid - (ap_slope * (xGrid - x) + y)) < 1; 
+    new_slice_img = slice_image;
+    new_slice_img(line_mask) = max(slice_image(:));
+
+    graphfig = figure('Name', 'Figure a. '+sub_name);
+    ax = axes(graphfig);
+    colormap(ax, 'bone');
+    imagesc(ax, new_slice_img);
+    axis(ax, 'image');
+    choice = questdlg('Are you satisfied with the axis?', ...
+        'Confirm Axis', 'Yes', 'No', 'Yes');
+
+    if strcmp(choice, 'Yes')
+        angle_rot = atan2(-10*ap_slope, 10) - tangle;
+        
+        if ap_y(2) < ap_y(1)
+            angle_rot = angle_rot + pi();
+        end
+        retry = false;
+    end
+
     while retry
         % Get user input for the Anterior-Posterior axis
         [ap_x, ap_y] = ginput(2);
@@ -76,29 +96,24 @@ function [tv, bv, bmc, bmd] = compare_dicoms(default_directory,res, ...
         new_slice_img(line_mask) = max(slice_image(:)); 
     
         % Display the modified image
-        imagesc(new_slice_img);
+        imagesc(ax, new_slice_img);
         axis image;
         choice = questdlg('Are you satisfied with the axis?', ...
             'Confirm Axis', 'Yes', 'No', 'Yes');
     
         % If the user is satisfied, exit the loop
         if strcmp(choice, 'Yes')
+            angle_rot = atan2(-10*ap_slope, 10) - tangle;
+            
+            if ap_y(2) < ap_y(1)
+                angle_rot = angle_rot + pi();
+            end
             retry = false;
         else
             % Reset the image if retrying
-            imagesc(slice_image);
+            imagesc(ax, slice_image);
         end
     end
-    
-    close(graphfig);
-
-    angle_ap = atan2(-ap_slope, 1);
-    if ap_y(2) < ap_y(1)
-        angle_ap = angle_ap + pi();
-    end
-    tangle = pi()/4;
-    angle = angle_ap - tangle;
-
     % Rotate mask to set anterior in quadrant 1
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
     %                    #
@@ -114,20 +129,20 @@ function [tv, bv, bmc, bmd] = compare_dicoms(default_directory,res, ...
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
     
     centroid = [x,y];
-    mask_1 = rotate_mask(mask_1,angle,centroid);
-    mask_2 = rotate_mask(mask_2,angle,centroid);
-    mask_LCV = rotate_mask(mask_LCV,angle,centroid);
+    mask_1 = rotate_mask(mask_1,angle_rot,centroid);
+    mask_2 = rotate_mask(mask_2,angle_rot,centroid);
+    mask_LCV = rotate_mask(mask_LCV,angle_rot,centroid);
 
     % View scan and choose medial side
-    graphfig = uifigure;
-    figure(graphfig)
-    colormap('hot');
-    imagesc(mask_LCV(:,:,round(size(mask_LCV,3)/2)));
-    title('LCV')
-    axis image
-    uialert(graphfig,'Now click on the medial side', ...
+    graphfig2 = figure('Name', ['Figure b. '+sub_name]);
+    ax2 = axes(graphfig2);
+    colormap(ax2, 'bone');
+    imagesc(ax2, mask_LCV(:,:,round(size(mask_LCV,3)/2)));
+    title(ax2, 'LCV')
+    axis(ax2, 'image');
+    uialert(graphfig2,'Now click on the medial side', ...
         'almost there!',Icon='success');
-    movegui(graphfig,'east');
+    movegui(graphfig2,'east');
     [med_x,] = ginput(1);
 
     mask_diff = mask_2 - mask_1;
