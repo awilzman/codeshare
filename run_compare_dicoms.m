@@ -7,7 +7,7 @@ calibrate_slope = 0.000357;
 calibrate_int = -0.0012625; 
 
 %list all subjects as comma separated list
-subjects = ["28 4 ","15 4 "]; %eg ["1","2","3"]
+subjects = ["15 4 ","28 4 "]; %eg ["1","2","3"]
 LCV_name = 'lcv';
 mask1_name = 'scan1';
 mask2_name = 'scan2';

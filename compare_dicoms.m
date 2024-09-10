@@ -9,14 +9,11 @@
 % Difference    % (3,1)             % (3,2)             % (3,3)            % (3,4)
 %
 % Written by Andrew Wilzman and Karen Troy 06/2023
-% Updated ARW 08/25/23
-% Updated ARW 09/29/23
-% Updated ARW 11/01/23
-% Updated ARW 01/15/24
-% Updated ARW 08/30/24
+% Example run:
 % calibrate_slope = 0.00035619;
-% calibrate_int = -0.00365584; %
-% [bv,bmc,bmd] = compare_dicoms(default_directory,res,LCV_name,mask1_name,mask2_name,calibrate_slope,calibrate_int)
+% calibrate_int = -0.00365584; 
+%res in um, voxel edge length
+% [bv,bmc,bmd, ap_x, ap_y] = compare_dicoms(default_directory,res,LCV_name,mask1_name,mask2_name,calibrate_slope,calibrate_int)
 
 % T. Hildebrand, A. Laib, R. Müller, J. Dequecker, P. Rüegsegger. 
 % Direct 3-D morphometric analysis of human cancellous bone: 
@@ -25,8 +22,6 @@
 function [tv, bv, bmc, bmd, ap_x, ap_y] = compare_dicoms(default_directory,res, ...
     LCV_name,mask1_name,mask2_name,calibrate_slope,calibrate_int, ...
     sub_name,ap_x,ap_y,first_full_slice)
-
-    %res in um, voxel edge length
 
     if nargin < 11
         first_full_slice = 30;
@@ -57,8 +52,7 @@ function [tv, bv, bmc, bmd, ap_x, ap_y] = compare_dicoms(default_directory,res, 
     retry = true;
 
     ap_slope = (ap_y(2) - ap_y(1)) / (ap_x(2) - ap_x(1));
-
-    % Create a mask for the line
+    
     [rows, cols] = size(slice_image);
     [xGrid, yGrid] = meshgrid(1:cols, 1:rows);
     line_mask = abs(yGrid - (ap_slope * (xGrid - x) + y)) < 1; 
@@ -74,9 +68,9 @@ function [tv, bv, bmc, bmd, ap_x, ap_y] = compare_dicoms(default_directory,res, 
         'Confirm Axis', 'Yes', 'No', 'Yes');
 
     if strcmp(choice, 'Yes')
-        angle_rot = atan2(-10*ap_slope, 10) - tangle;
+        angle_rot = -atan2(-10*ap_slope, 10) + tangle;
         
-        if ap_y(2) < ap_y(1)
+        if ap_x(1) < ap_x(2)
             angle_rot = angle_rot + pi();
         end
         retry = false;
@@ -103,9 +97,10 @@ function [tv, bv, bmc, bmd, ap_x, ap_y] = compare_dicoms(default_directory,res, 
     
         % If the user is satisfied, exit the loop
         if strcmp(choice, 'Yes')
-            angle_rot = atan2(-10*ap_slope, 10) - tangle;
+            movegui(graphfig,'west');
+            angle_rot = -atan2(-10*ap_slope, 10) + tangle;
             
-            if ap_y(2) < ap_y(1)
+            if ap_x(1) < ap_x(2)
                 angle_rot = angle_rot + pi();
             end
             retry = false;
@@ -134,13 +129,14 @@ function [tv, bv, bmc, bmd, ap_x, ap_y] = compare_dicoms(default_directory,res, 
     mask_LCV = rotate_mask(mask_LCV,angle_rot,centroid);
 
     % View scan and choose medial side
-    graphfig2 = figure('Name', ['Figure b. '+sub_name]);
+    graphfig2 = figure('Name', 'Figure b. '+sub_name);
     ax2 = axes(graphfig2);
     colormap(ax2, 'bone');
     imagesc(ax2, mask_LCV(:,:,round(size(mask_LCV,3)/2)));
     title(ax2, 'LCV')
     axis(ax2, 'image');
-    uialert(graphfig2,'Now click on the medial side', ...
+    fig2 = uifigure();
+    uialert(fig2,'Now click on the medial side', ...
         'almost there!',Icon='success');
     movegui(graphfig2,'east');
     [med_x,] = ginput(1);
