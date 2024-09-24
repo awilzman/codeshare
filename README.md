@@ -32,3 +32,9 @@ list them together with the first stack being the reference.
 PLEASE NOTE: Each time you run this code a new output.xlsx will be
 written to the code's home directory. This WILL be overwritten if 
 you run the code again.
+
+Update 09/24/24: Now requires a single center dicom nested in a folder
+called {sub} {location} scan1_raw
+This is required only from scan1 because scan2 is later registered to 
+scan1. We use this single slice to calculate the medial side and 
+angle of rotation for regional analysis.
