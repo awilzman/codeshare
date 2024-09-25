@@ -1,74 +1,60 @@
-clear % save data before starting
+clear;  % Clear workspace
 
 % Initial Setup
-directory = ''; % Directory of DICOM files (end slash is important)
-res = 82; % Image resolution (in micrometers)
+subs = ["15"];  % List of subjects
+directory = '';  % Directory of DICOM files (end slash is important)
+res = 82;  % Image resolution (in micrometers)
 calibrate_slope = 0.000357;
 calibrate_int = -0.0012625;
+excelFileName = 'output.xlsx';  % Output file name
 
-excelFileName = 'output.xlsx'; % Output file name
-allData = {}; 
 columns = ["Anterior", "Posterior", "Medial", "Lateral"]; 
 rows = [""; "Scan 1"; "Scan 2"; "Difference"];
+labels = cellstr(["File name"; "Total Volume [cm^3]"; "Bone Volume [cm^3]"; ...
+    "Bone Mineral Content [g]"; "Bone Mineral Density [g/cm^3]"]);
 
-% Filenames
-LCV_name = 'lcv'; mask1_name = 'scan1'; mask2_name = 'scan2';
-
-% Labels for output
-labels = cellstr(["File name"; "Total Volume [cm^3]"; "Bone Volume [cm^3]"; "Bone Mineral Content [g]"; "Bone Mineral Density [g/cm^3]"]);
-
-subs = ["15"]; % List of subjects
-medial_left = 0;
+% Initialize
+output = cell(length(subs), 2, 5);  % Preallocate for output
+mask1s = cell(length(subs), 2);  % Preallocate for mask1s
+mask2s = cell(length(subs), 2);  % Preallocate for mask2s
 
 % Loop through subjects
 for s = 1:length(subs)
-    subjects = [strcat(subs(s), " 4 "), strcat(subs(s), " 30 ")];
-    angle = 0;
+    subjects = strcat(subs(s), [" 4 ", " 30 "]);
     
-    % Prepare file names
+    % Prepare file names and compare DICOMs
     for i = 1:length(subjects)
-        output{s,i} = strcat(subjects(i), LCV_name);
-        mask1s{s,i} = strcat(subjects(i), mask1_name);
-        mask2s{s,i} = strcat(subjects(i), mask2_name);
-    end
-    
-    % Compare DICOMs and store results
-    for i = 1:length(output)
-        disp(strcat("Running ", subjects(i)))
-        [output{s,2,i}, output{s,3,i}, output{s,4,i}, output{s,5,i}, medial_left, angle] = compare_dicoms(directory, ...
-            res, output{s,1,i}, mask1s{i}, mask2s{i}, calibrate_slope, calibrate_int, medial_left, angle);
+        output{s, i, 1} = strcat(subjects(i), 'lcv');  % Scan name
+        mask1s{s, i} = strcat(subjects(i), 'scan1');   % Mask 1 name
+        mask2s{s, i} = strcat(subjects(i), 'scan2');   % Mask 2 name
+
+        disp("Running " + subjects(i));  % Log current subject
         
-        % Add headers to output data
-        for j = 2:5
-            output{s,j,i} = cat(1, columns, output{s,j,i});
-            output{s,j,i} = cat(2, rows, output{s,j,i});
-            output{s,j,i}(1,1) = labels(j);
-        end
+        % Compare DICOMs and store results
+        [output{s, i, 2}, output{s, i, 3}, output{s, i, 4}, output{s, i, 5}] = ...
+            compare_dicoms(directory, res, output{s, i, 1}, mask1s{s, i}, mask2s{s, i}, ...
+            calibrate_slope, calibrate_int, 0, 0);
     end
-    
-    % Append subject's data into output
-    output{s} = [labels, output];
 end
 
-% Save the results to the Excel file
-for s = 1:length(subs)
-    for j = 2:length(subjects) + 1
-        baseRow = 36 * (s - 1) + (j - 2) * 18 + 1; 
-        allData{baseRow, 1} = output{1, j}; 
-        
-        for i = 2:5
-            startRow = baseRow + (i - 2) * 4; 
-            dataMatrix = output{i, j}; 
+allData = {};  % Initialize allData for Excel output
+
+% Save results to Excel
+for s = 1:length(subs)  % Loop over subjects
+    for i = 1:size(output, 2)  % Number of scans
+        baseRow = 36 * (s - 1) + 18 * (i - 1) + 1; 
+        for j = 2:size(output, 3)  % Loop over features
+            startRow = baseRow + 4 * (j - 2);
+            allData(startRow, 2:5) = labels(2:end);  % Store labels
+            dataMatrix = output{s, i, j};  % Access the data 
             [numDataRows, numDataCols] = size(dataMatrix); 
-            
-            % Insert data into allData
             for r = 1:numDataRows
-                for c = 1:numDataCols
-                    allData{startRow + r - 1, c + 1} = dataMatrix(r, c); 
-                end
+                allData(startRow + r, 2:5) = num2cell(dataMatrix(r, :));  % Fill in data
             end
         end
+        allData{baseRow, 1} = output{s, i, 1};  % Store subject info
     end
 end
 
-writecell(allData, excelFileName, 'Sheet', 1);
+% Write the data to Excel, overwriting if it exists
+writecell(allData, excelFileName, 'Sheet', 1, 'WriteMode', 'overwrite');  
