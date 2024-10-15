@@ -63,31 +63,22 @@ function [tv, bv, bmc, bmd, medial_left, angle_rot] = compare_dicoms(default_dir
         end
         
         raw_image = dicomread(full_dicom_path);
-        raw_image = raw_image > 10;
-        raw_image = logical(raw_image);
-        stats = regionprops(raw_image, 'Area', 'PixelList');
+        raw_image_b = raw_image > 2 / calibrate_slope;
+        raw_image_b = logical(raw_image_b);
+        stats = regionprops(raw_image_b, 'Area', 'Centroid');
+        min_area_threshold = 500;
+        stats = stats([stats.Area] > min_area_threshold);
         areas = [stats.Area];
         [~, idx_tibia] = max(areas);
         [~, idx_fibula] = min(areas);
-        tibia_pixels = stats(idx_tibia).PixelList; % pixels [row, col]
-        fibula_pixels = stats(idx_fibula).PixelList;
-        tibia_rows = tibia_pixels(:,2); % Rows (Y coordinates)
-        tibia_cols = tibia_pixels(:,1); % Columns (X coordinates)
-    
-        tibia_circle_center = fminsearch(@(c) max( ...
-            sqrt((tibia_rows - c(1)).^2 + (tibia_cols - c(2)).^2)), ...
-            [mean(tibia_rows), mean(tibia_cols)]);
-        fibula_rows = fibula_pixels(:,2); 
-        fibula_cols = fibula_pixels(:,1); 
-        fibula_circle_center = fminsearch(@(c) max(sqrt(( ...
-            fibula_rows - c(1)).^2 + (fibula_cols - c(2)).^2)), ...
-            [mean(fibula_rows), mean(fibula_cols)]);
-        delta_y = fibula_circle_center(1) - tibia_circle_center(1);
-        delta_x = fibula_circle_center(2) - tibia_circle_center(2);
+        tibia_centroid = stats(idx_tibia).Centroid; 
+        fibula_centroid = stats(idx_fibula).Centroid;
+        delta_y = tibia_centroid(2) - fibula_centroid(2);  % Y difference (rows)
+        delta_x = tibia_centroid(1) - fibula_centroid(1);  % X difference (columns)
         % Angle calculation
         angle_rot = atan2(delta_y, delta_x)-tangle+pi();
         % Medial side calculation
-        if tibia_circle_center(2) < fibula_circle_center(2)
+        if tibia_centroid(1) < fibula_centroid(1)
             medial_left = true;
         else
             medial_left = false;
@@ -133,9 +124,6 @@ function [tv, bv, bmc, bmd, medial_left, angle_rot] = compare_dicoms(default_dir
     slice_image(line_mask) = max(slice_image(:));
     line_mask = abs(yGrid - ((1/(-ap_slope + 1e-6)) * (xGrid - x) + y)) < 1;
     slice_image(line_mask) = max(slice_image(:));
-
-    slice_image = uint16(slice_image);
-    imwrite(slice_image,strcat(default_directory,mask1_name,".png"))
 
     % Calculate metrics
     % 4 sections, anterior/posterior and medial/lateral columns
@@ -264,6 +252,43 @@ function [tv, bv, bmc, bmd, medial_left, angle_rot] = compare_dicoms(default_dir
     bmd(3,2) = bmd(2,2)-bmd(1,2);
     bmd(3,3) = bmd(2,3)-bmd(1,3);
     bmd(3,4) = bmd(2,4)-bmd(1,4);
+
+    slice_image = uint16(slice_image);
+    imwrite(slice_image,strcat(default_directory,mask1_name,".png"))
+
+    color_ant = [255, 0, 0];   % Red for anterior
+    color_post = [0, 255, 0];  % Green for posterior
+    color_med = [0, 0, 255];   % Blue for medial
+    color_lat = [255, 255, 0]; % Yellow for lateral
+    slice_image_rgb = zeros([size(slice_image), 3], 'uint8');
+    
+    for z = 1:size(mask_1, 3)
+        % Anterior section
+        slice_image_rgb(:,:,1) = slice_image_rgb(:,:,1) + uint8(mask_1_ant(:,:,z)) * color_ant(1);
+        slice_image_rgb(:,:,2) = slice_image_rgb(:,:,2) + uint8(mask_1_ant(:,:,z)) * color_ant(2);
+        slice_image_rgb(:,:,3) = slice_image_rgb(:,:,3) + uint8(mask_1_ant(:,:,z)) * color_ant(3);
+    
+        % Posterior section
+        slice_image_rgb(:,:,1) = slice_image_rgb(:,:,1) + uint8(mask_1_post(:,:,z)) * color_post(1);
+        slice_image_rgb(:,:,2) = slice_image_rgb(:,:,2) + uint8(mask_1_post(:,:,z)) * color_post(2);
+        slice_image_rgb(:,:,3) = slice_image_rgb(:,:,3) + uint8(mask_1_post(:,:,z)) * color_post(3);
+    
+        % Medial section
+        slice_image_rgb(:,:,1) = slice_image_rgb(:,:,1) + uint8(mask_1_med(:,:,z)) * color_med(1);
+        slice_image_rgb(:,:,2) = slice_image_rgb(:,:,2) + uint8(mask_1_med(:,:,z)) * color_med(2);
+        slice_image_rgb(:,:,3) = slice_image_rgb(:,:,3) + uint8(mask_1_med(:,:,z)) * color_med(3);
+    
+        % Lateral section
+        slice_image_rgb(:,:,1) = slice_image_rgb(:,:,1) + uint8(mask_1_lat(:,:,z)) * color_lat(1);
+        slice_image_rgb(:,:,2) = slice_image_rgb(:,:,2) + uint8(mask_1_lat(:,:,z)) * color_lat(2);
+        slice_image_rgb(:,:,3) = slice_image_rgb(:,:,3) + uint8(mask_1_lat(:,:,z)) * color_lat(3);
+    end
+    
+    imwrite(slice_image_rgb, strcat(default_directory, mask1_name, '_segmented.png'));
+    % Red anterior
+    % Green Posterior
+    % Blue Medial
+    % Yellow Lateral
 end
 
 % Function definitions

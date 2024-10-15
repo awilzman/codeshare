@@ -55,6 +55,10 @@ for s = 1:length(subs)  % Loop over subjects
             end
         end
         allData{baseRow, 1} = output{s, i, 1};  % Store subject info
+        allData{baseRow + 1} = 'Anterior';
+        allData{baseRow + 5} = 'Posterior';
+        allData{baseRow + 9} = 'Medial';
+        allData{baseRow + 13} = 'Lateral';
     end
 end
 
