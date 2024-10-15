@@ -55,10 +55,18 @@ for s = 1:length(subs)  % Loop over subjects
             end
         end
         allData{baseRow, 1} = output{s, i, 1};  % Store subject info
-        allData{baseRow + 1} = 'Anterior';
-        allData{baseRow + 5} = 'Posterior';
-        allData{baseRow + 9} = 'Medial';
-        allData{baseRow + 13} = 'Lateral';
+        allData{baseRow + 1} = 'Anterior Scan 1';
+        allData{baseRow + 2} = 'Anterior Scan 2';
+        allData{baseRow + 3} = 'Anterior Difference';
+        allData{baseRow + 5} = 'Posterior Scan 1';
+        allData{baseRow + 6} = 'Posterior Scan 2';
+        allData{baseRow + 7} = 'Posterior Difference';
+        allData{baseRow + 9} = 'Medial Scan 1';
+        allData{baseRow + 10} = 'Medial Scan 2';
+        allData{baseRow + 11} = 'Medial Difference';
+        allData{baseRow + 13} = 'Lateral Scan 1';
+        allData{baseRow + 14} = 'Lateral Scan 2';
+        allData{baseRow + 15} = 'Lateral Difference';
     end
 end
 
