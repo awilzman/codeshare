@@ -96,19 +96,13 @@ function [tv, bv, bmc, bmd, medial_left, angle_rot] = compare_dicoms(default_dir
 
     z_center = round(size(mask_LCV, 3) / 2); % Middle slice index
     center_slice = mask_LCV(:, :, z_center); % 2D slice along Z axis
-    
-    % Identify non-zero elements in the center slice
     non_zero_voxels_2D = center_slice > 0;
-    [rows, cols] = find(non_zero_voxels_2D); % Get row and col indices of non-zero voxels
+    filled_slice = imfill(non_zero_voxels_2D, 'holes');
+    [rows, cols] = find(filled_slice); 
     
-    % Fit a minimal enclosing circle to the non-zero points
-    circle_center = fminsearch(@(c) max(sqrt((rows - c(2)).^2 + (cols - c(1)).^2)), ...
-                               [mean(cols), mean(rows)]); % Find circle center minimizing max radius
-    
-    % Output new origin
-    x = circle_center(1);
-    y = circle_center(2);
-
+    x = mean(cols);
+    y = mean(rows);
+    circle_center = [x, y];
     % Rotate mask to set anterior in quadrant 1
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
     %                    #
