@@ -73,15 +73,15 @@ function [tv, bv, bmc, bmd, medial_left, angle_rot] = compare_dicoms(default_dir
         [~, idx_fibula] = min(areas);
         tibia_centroid = stats(idx_tibia).Centroid; 
         fibula_centroid = stats(idx_fibula).Centroid;
-        delta_y = tibia_centroid(2) - fibula_centroid(2);  % Y difference (rows)
-        delta_x = tibia_centroid(1) - fibula_centroid(1);  % X difference (columns)
+        delta_y = fibula_centroid(2) - tibia_centroid(2);  % Y difference (rows)
+        delta_x = fibula_centroid(1) - tibia_centroid(1);  % X difference (columns)
         % Angle calculation
         angle_rot = atan2(delta_y, delta_x)-tangle+pi();
         % Medial side calculation
         if tibia_centroid(1) < fibula_centroid(1)
-            medial_left = true;
+            medial_left = 1;
         else
-            medial_left = false;
+            medial_left = 0;
         end
     end
 
@@ -144,7 +144,7 @@ function [tv, bv, bmc, bmd, medial_left, angle_rot] = compare_dicoms(default_dir
     % Split up the masks based on anterior/posterior/medial/lateral
     x = uint16(x);
     y = uint16(y);
-    if medial_left %medial in quadrant 2
+    if medial_left == 1 %medial in quadrant 2
         for z = 1:size(mask_1,3)
             mask_1_med(1:y,1:x,z) = mask_1(1:y,1:x,z);
             mask_1_ant(1:y,x+1:end,z) = mask_1(1:y,x+1:end,z);
