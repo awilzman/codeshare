@@ -1,7 +1,7 @@
 clear;  % Clear workspace
 
 % Initial Setup
-subs = ["28","15"];  % List of subjects
+subs = ["15"];  % List of subjects
 directory = '';  % Directory of DICOM files (end slash is important)
 res = 82;  % Image resolution (in micrometers)
 calibrate_slope = 0.000357;
@@ -19,7 +19,6 @@ mask1s = cell(length(subs), 2);  % Preallocate for mask1s
 mask2s = cell(length(subs), 2);  % Preallocate for mask2s
 
 % Loop through subjects
-
 
 for s = 1:length(subs)
     subjects = strcat(subs(s), [" 4 ", " 30 "]);
@@ -44,7 +43,7 @@ for s = 1:length(subs)
     end
 end
 
-allData = {};  % Initialize allData for Excel output
+data = {};  % Initialize allData for Excel output
 
 % Save results to Excel
 for s = 1:length(subs)  % Loop over subjects
@@ -52,28 +51,28 @@ for s = 1:length(subs)  % Loop over subjects
         baseRow = 36 * (s - 1) + 18 * (i - 1) + 1; 
         for j = 2:size(output, 3)  % Loop over features
             startRow = baseRow + 4 * (j - 2);
-            allData(startRow, 2:5) = labels(2:end);  % Store labels
+            data(startRow, 2:5) = labels(2:end);  % Store labels
             dataMatrix = output{s, i, j};  % Access the data 
             [numDataRows, numDataCols] = size(dataMatrix); 
             for r = 1:numDataRows
-                allData(startRow + r, 2:5) = num2cell(dataMatrix(r, :));  % Fill in data
+                data(startRow + r, 2:5) = num2cell(dataMatrix(r, :));  % Fill in data
             end
         end
-        allData{baseRow, 1} = output{s, i, 1};  % Store subject info
-        allData{baseRow + 1} = 'Anterior Scan 1';
-        allData{baseRow + 2} = 'Anterior Scan 2';
-        allData{baseRow + 3} = 'Anterior Difference';
-        allData{baseRow + 5} = 'Posterior Scan 1';
-        allData{baseRow + 6} = 'Posterior Scan 2';
-        allData{baseRow + 7} = 'Posterior Difference';
-        allData{baseRow + 9} = 'Medial Scan 1';
-        allData{baseRow + 10} = 'Medial Scan 2';
-        allData{baseRow + 11} = 'Medial Difference';
-        allData{baseRow + 13} = 'Lateral Scan 1';
-        allData{baseRow + 14} = 'Lateral Scan 2';
-        allData{baseRow + 15} = 'Lateral Difference';
+        data{baseRow, 1} = output{s, i, 1};  % Store subject info
+        data{baseRow + 1} = 'Anterior Scan 1';
+        data{baseRow + 2} = 'Anterior Scan 2';
+        data{baseRow + 3} = 'Anterior Difference';
+        data{baseRow + 5} = 'Posterior Scan 1';
+        data{baseRow + 6} = 'Posterior Scan 2';
+        data{baseRow + 7} = 'Posterior Difference';
+        data{baseRow + 9} = 'Medial Scan 1';
+        data{baseRow + 10} = 'Medial Scan 2';
+        data{baseRow + 11} = 'Medial Difference';
+        data{baseRow + 13} = 'Lateral Scan 1';
+        data{baseRow + 14} = 'Lateral Scan 2';
+        data{baseRow + 15} = 'Lateral Difference';
     end
 end
 
 % Write the data to Excel, overwriting if it exists
-writecell(allData, excelFileName, 'Sheet', 1, 'WriteMode', 'overwrite');  
+writecell(data, excelFileName, 'Sheet', 1, 'WriteMode', 'overwrite');  

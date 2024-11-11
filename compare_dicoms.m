@@ -93,7 +93,7 @@ function [tv, bv, bmc, bmd, medial_left, angle_rot] = compare_dicoms(default_dir
     
     x = mean(cols);
     y = mean(rows);
-    circle_center = [x, y];
+    ccenter = [x, y];
     % Rotate mask to set anterior in quadrant 1
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
     %                    #
@@ -108,8 +108,8 @@ function [tv, bv, bmc, bmd, medial_left, angle_rot] = compare_dicoms(default_dir
     %                    #
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-    mask_1 = rotate_mask(mask_1,angle_rot,circle_center);
-    mask_2 = rotate_mask(mask_2,angle_rot,circle_center);
+    mask_1 = rotate_mask(mask_1,angle_rot,ccenter);
+    mask_2 = rotate_mask(mask_2,angle_rot,ccenter);
     
     mask_1 = int16(mask_1);
     mask_2 = int16(mask_2);
