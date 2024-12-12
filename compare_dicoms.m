@@ -82,6 +82,7 @@ function [tv, bv, bmc, bmd, medial_left, angle_rot] = compare_dicoms(default_dir
             medial_left = 1;
         else
             medial_left = 0;
+            angle_rot = angle_rot + pi();
         end
     end
 
