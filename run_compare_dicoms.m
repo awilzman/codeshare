@@ -4,8 +4,8 @@ clear;  % Clear workspace
 subs = ["15"];  % List of subjects
 directory = '';  % Directory of DICOM files (end slash is important)
 res = 82;  % Image resolution (in micrometers)
-calibrate_slope = 0.000357;
-calibrate_int = -0.0012625;
+calibrate_slope = 0.000379;
+calibrate_int = -0.00603;
 excelFileName = 'output.xlsx';  % Output file name
 
 columns = ["Anterior", "Posterior", "Medial", "Lateral"]; 
@@ -18,12 +18,12 @@ output = cell(length(subs), 2, 5);  % Preallocate for output
 mask1s = cell(length(subs), 2);  % Preallocate for mask1s
 mask2s = cell(length(subs), 2);  % Preallocate for mask2s
 
-% Loop through subjects
-
+% Loop over subjects
 for s = 1:length(subs)
     subjects = strcat(subs(s), [" 4 ", " 30 "]);
     angle_rot = 0;
     medial_left = 0;
+    
     % Prepare file names and compare DICOMs
     for i = 1:length(subjects)
         output{s, i, 1} = strcat(subjects(i), 'lcv');  % Scan name
@@ -34,45 +34,69 @@ for s = 1:length(subs)
         
         % Compare DICOMs and store results
         try
-            [output{s, i, 2}, output{s, i, 3}, output{s, i, 4}, output{s, i, 5}] = ...
+            % Each feature is now a 3x4 table
+            [tv, bv, bmc, bmd, medial_left, angle_rot] = ...
                 compare_dicoms(directory, res, output{s, i, 1}, mask1s{s, i}, mask2s{s, i}, ...
                 calibrate_slope, calibrate_int, medial_left, angle_rot);
+            
+            % Store 3x4 tables for each feature
+            output{s, i, 2} = tv;   % 3x4 table for tv
+            output{s, i, 3} = bv;   % 3x4 table for bv
+            output{s, i, 4} = bmc;  % 3x4 table for bmc
+            output{s, i, 5} = bmd;  % 3x4 table for bmd
+            
         catch
             disp(['No data for ' + subjects(i)]);
         end
     end
 end
 
-data = {};  % Initialize allData for Excel output
-
+% Initialize data array for output to Excel
+data = {}; 
 % Save results to Excel
 for s = 1:length(subs)  % Loop over subjects
-    for i = 1:size(output, 2)  % Number of scans
+    for i = 1:size(output, 2) 
         baseRow = 36 * (s - 1) + 18 * (i - 1) + 1; 
-        for j = 2:size(output, 3)  % Loop over features
+        
+        % Store subject info
+        data{baseRow + 1, 1} = output{s, i, 1};  
+
+        % Create labels for each row
+        data{baseRow + 1, 1} = 'Scan 1';
+        data{baseRow + 2, 1} = 'Scan 2';
+        data{baseRow + 3, 1} = 'Difference';
+        
+        % Labels for the columns (Anterior, Posterior, Medial, Lateral)
+        data(baseRow, 2:5) = {'Anterior', 'Posterior', 'Medial', 'Lateral'};
+        
+        % Loop through each feature (tv, bv, bmc, bmd)
+        for j = 2:5
             startRow = baseRow + 4 * (j - 2);
-            data(startRow, 2:5) = labels(2:end);  % Store labels
-            dataMatrix = output{s, i, j};  % Access the data 
-            [numDataRows, numDataCols] = size(dataMatrix); 
-            for r = 1:numDataRows
-                data(startRow + r, 2:5) = num2cell(dataMatrix(r, :));  % Fill in data
+            
+            featureLabel = {'Total Volume [cm^3]', 'Bone Volume [cm^3]', ... 
+                'Bone Mineral Content [g]', 'Bone Mineral Density [g/cm^3]'};  
+            data{startRow, 1} = strcat(subs{s},'_',featureLabel{j - 1});  % Label for the feature
+            data{startRow + 1, 1} = 'Scan 1';
+            data{startRow + 2, 1} = 'Scan 2';
+            data{startRow + 3, 1} = 'Difference';
+            dataMatrix = output{s, i, j}; 
+            
+            for r = 1:3  % Row 1 = Scan1, Row 2 = Scan2, Row 3 = Difference
+                data(startRow + r, 2:5) = num2cell(dataMatrix(r, :));
             end
         end
-        data{baseRow, 1} = output{s, i, 1};  % Store subject info
-        data{baseRow + 1} = 'Anterior Scan 1';
-        data{baseRow + 2} = 'Anterior Scan 2';
-        data{baseRow + 3} = 'Anterior Difference';
-        data{baseRow + 5} = 'Posterior Scan 1';
-        data{baseRow + 6} = 'Posterior Scan 2';
-        data{baseRow + 7} = 'Posterior Difference';
-        data{baseRow + 9} = 'Medial Scan 1';
-        data{baseRow + 10} = 'Medial Scan 2';
-        data{baseRow + 11} = 'Medial Difference';
-        data{baseRow + 13} = 'Lateral Scan 1';
-        data{baseRow + 14} = 'Lateral Scan 2';
-        data{baseRow + 15} = 'Lateral Difference';
     end
 end
 
-% Write the data to Excel, overwriting if it exists
-writecell(data, excelFileName, 'Sheet', 1, 'WriteMode', 'overwrite');  
+% Determine a new file name with incremented version number
+fileNumber = 1;
+[folder, name, ext] = fileparts(excelFileName);
+newFileName = fullfile(folder, [name, '_v', num2str(fileNumber), ext]);
+
+while isfile(newFileName)
+    fileNumber = fileNumber + 1;
+    newFileName = fullfile(folder, [name, '_v', num2str(fileNumber), ext]);
+end
+
+% Write the data to Excel as a new file
+writecell(data, newFileName, 'Sheet', 1);

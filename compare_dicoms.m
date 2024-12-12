@@ -66,7 +66,7 @@ function [tv, bv, bmc, bmd, medial_left, angle_rot] = compare_dicoms(default_dir
         raw_image_b = raw_image > 2 / calibrate_slope;
         raw_image_b = logical(raw_image_b);
         stats = regionprops(raw_image_b, 'Area', 'Centroid');
-        min_area_threshold = 500;
+        min_area_threshold = 10000;
         stats = stats([stats.Area] > min_area_threshold);
         areas = [stats.Area];
         [~, idx_tibia] = max(areas);
@@ -227,7 +227,8 @@ function [tv, bv, bmc, bmd, medial_left, angle_rot] = compare_dicoms(default_dir
             mask_2_med(1+y:y_bot,x+1,z) = 1;
         end
     end
-    
+
+
     [tv(1,1), bv(1,1), bmc(1,1), bmd(1,1)] = bv_bmc(mask_1_ant,res,calibrate_slope,calibrate_int);
     [tv(1,2), bv(1,2), bmc(1,2), bmd(1,2)] = bv_bmc(mask_1_post,res,calibrate_slope,calibrate_int);
     [tv(1,3), bv(1,3), bmc(1,3), bmd(1,3)] = bv_bmc(mask_1_med,res,calibrate_slope,calibrate_int);
@@ -331,14 +332,12 @@ function [tv, bv, bmc, bmd] = bv_bmc(mask, res, slope, int)
 
         slice_density = mean(mean(slice(slice>1))) * slope + int;
         slice_content = slice_density * bv_vol;
-        slice_density = slice_content / vol;
 
         tv = tv + vol; %Total Volume
         bv = bv + bv_vol; %Bone Volume
-        bmd = bmd + slice_density;
         bmc = bmc + slice_content;
     end
-    bmd = bmd / size(mask,3);
+    bmd = bmc / tv;
 end
 
 function [new_mask] = rotate_mask(mask, rotationAngle, centroid, interpolationMethod)
