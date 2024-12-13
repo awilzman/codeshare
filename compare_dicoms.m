@@ -10,6 +10,7 @@
 % Difference    % (3,1)             % (3,2)             % (3,3)            % (3,4)
 %
 % Written by Andrew Wilzman and Karen Troy 06/2023
+% Updated 12/13/2024
 % Example run:
 % calibrate_slope = 0.00035619;
 % calibrate_int = -0.00365584; 
@@ -116,6 +117,15 @@ function [tv, bv, bmc, bmd, medial_left, angle_rot] = compare_dicoms(default_dir
     mask_2 = int16(mask_2);
     mask_1 = pad_3dmat(mask_1);
     mask_2 = pad_3dmat(mask_2);
+
+    z_center = round(size(mask_1, 3) / 2); % Middle slice index
+    center_slice = mask_1(:, :, z_center); % 2D slice along Z axis
+    non_zero_voxels_2D = center_slice > 0;
+    filled_slice = imfill(non_zero_voxels_2D, 'holes');
+    [rows, cols] = find(filled_slice); 
+    
+    x = mean(cols);
+    y = mean(rows);
 
     slice_image = mask_1(:,:,round(size(mask_1,3)/2));
     [rows, cols] = size(slice_image);
