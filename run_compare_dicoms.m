@@ -52,15 +52,27 @@ for s = 1:length(subs)
 end
 
 % Initialize data array for output to Excel
-data = {}; 
+% Calculate total number of rows and columns
+numSubjects = length(subs);
+numScans = size(output, 2);
+totalRows = numSubjects * numScans * 36; 
+totalCols = 5; % Maximum number of columns used
+
+% Preallocate 'data' cell array
+data = cell(totalRows, totalCols);
+
 % Save results to Excel
 for s = 1:length(subs)  % Loop over subjects
     for i = 1:size(output, 2) 
         baseRow = 36 * (s - 1) + 18 * (i - 1) + 1; 
         
-        % Store subject info
-        data{baseRow + 1, 1} = output{s, i, 1};  
-
+        % Store subject info (filename of the scan)
+        if ~isempty(output{s, i, 1})
+            data{baseRow + 1, 1} = output{s, i, 1};  
+        else
+            data{baseRow + 1, 1} = 'No Data';
+        end
+        
         % Create labels for each row
         data{baseRow + 1, 1} = 'Scan 1';
         data{baseRow + 2, 1} = 'Scan 2';
@@ -75,18 +87,29 @@ for s = 1:length(subs)  % Loop over subjects
             
             featureLabel = {'Total Volume [cm^3]', 'Bone Volume [cm^3]', ... 
                 'Bone Mineral Content [g]', 'Bone Mineral Density [g/cm^3]'};  
-            data{startRow, 1} = strcat(subs{s},'_',featureLabel{j - 1});  % Label for the feature
+            
+            % Label for the feature
+            data{startRow, 1} = strcat(subs{s},'_',featureLabel{j - 1});  
             data{startRow + 1, 1} = 'Scan 1';
             data{startRow + 2, 1} = 'Scan 2';
             data{startRow + 3, 1} = 'Difference';
-            dataMatrix = output{s, i, j}; 
             
-            for r = 1:3  % Row 1 = Scan1, Row 2 = Scan2, Row 3 = Difference
-                data(startRow + r, 2:5) = num2cell(dataMatrix(r, :));
+            % Check if output exists for this subject, scan, and feature
+            if ~isempty(output{s, i, j}) && size(output{s, i, j}, 1) >= 3 && size(output{s, i, j}, 2) >= 4
+                dataMatrix = output{s, i, j}; 
+                for r = 1:3  % Row 1 = Scan1, Row 2 = Scan2, Row 3 = Difference
+                    data(startRow + r, 2:5) = num2cell(dataMatrix(r, :));
+                end
+            else
+                % If no data is available, add placeholders
+                for r = 1:3
+                    data(startRow + r, 2:5) = {'No Data', 'No Data', 'No Data', 'No Data'};
+                end
             end
         end
     end
 end
+
 
 % Determine a new file name with incremented version number
 fileNumber = 1;
