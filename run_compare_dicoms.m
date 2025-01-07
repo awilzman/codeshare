@@ -1,7 +1,7 @@
 clear;  % Clear workspace
 
 % Initial Setup
-subs = ["15"];  % List of subjects
+subs = ["28","78"];  % List of subjects
 directory = '';  % Directory of DICOM files (end slash is important)
 res = 82;  % Image resolution (in micrometers)
 calibrate_slope = 0.000379;

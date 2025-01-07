@@ -67,11 +67,12 @@ function [tv, bv, bmc, bmd, medial_left, angle_rot] = compare_dicoms(default_dir
         raw_image_b = raw_image > 2 / calibrate_slope;
         raw_image_b = logical(raw_image_b);
         stats = regionprops(raw_image_b, 'Area', 'Centroid');
-        min_area_threshold = 10000;
+        min_area_threshold = 5000;
         stats = stats([stats.Area] > min_area_threshold);
         areas = [stats.Area];
-        [~, idx_tibia] = max(areas);
-        [~, idx_fibula] = min(areas);
+        [~, sorted_idx] = sort(areas, 'descend');
+        idx_tibia = sorted_idx(1);
+        idx_fibula = sorted_idx(2);
         tibia_centroid = stats(idx_tibia).Centroid; 
         fibula_centroid = stats(idx_fibula).Centroid;
         delta_y = fibula_centroid(2) - tibia_centroid(2);  % Y difference (rows)
@@ -83,7 +84,7 @@ function [tv, bv, bmc, bmd, medial_left, angle_rot] = compare_dicoms(default_dir
             medial_left = 1;
         else
             medial_left = 0;
-            angle_rot = angle_rot + pi();
+            angle_rot = angle_rot + pi() - tangle;
         end
     end
 
