@@ -78,13 +78,13 @@ function [tv, bv, bmc, bmd, medial_left, angle_rot] = compare_dicoms(default_dir
         delta_y = fibula_centroid(2) - tibia_centroid(2);  % Y difference (rows)
         delta_x = fibula_centroid(1) - tibia_centroid(1);  % X difference (columns)
         % Angle calculation
-        angle_rot = atan2(delta_y, delta_x)-tangle;
+        angle_rot = atan2(delta_y, delta_x)-tangle*2;
         % Medial side calculation
         if tibia_centroid(1) < fibula_centroid(1)
-            medial_left = 1;
-        else
             medial_left = 0;
-            angle_rot = angle_rot + pi() - tangle;
+        else
+            medial_left = 1;
+            angle_rot = angle_rot + pi();
         end
     end
 
