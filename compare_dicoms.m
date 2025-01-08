@@ -64,7 +64,7 @@ function [tv, bv, bmc, bmd, medial_left, angle_rot] = compare_dicoms(default_dir
         end
         
         raw_image = dicomread(full_dicom_path);
-        raw_image_b = raw_image > 2 / calibrate_slope;
+        raw_image_b = raw_image > 1.5 / calibrate_slope;
         raw_image_b = logical(raw_image_b);
         stats = regionprops(raw_image_b, 'Area', 'Centroid');
         min_area_threshold = 5000;
@@ -75,16 +75,17 @@ function [tv, bv, bmc, bmd, medial_left, angle_rot] = compare_dicoms(default_dir
         idx_fibula = sorted_idx(2);
         tibia_centroid = stats(idx_tibia).Centroid; 
         fibula_centroid = stats(idx_fibula).Centroid;
-        delta_y = fibula_centroid(2) - tibia_centroid(2);  % Y difference (rows)
-        delta_x = fibula_centroid(1) - tibia_centroid(1);  % X difference (columns)
+        delta_y = fibula_centroid(2) - tibia_centroid(2);
+        delta_x = fibula_centroid(1) - tibia_centroid(1);
         % Angle calculation
-        angle_rot = atan2(delta_y, delta_x)-tangle*2;
+        
         % Medial side calculation
         if tibia_centroid(1) < fibula_centroid(1)
-            medial_left = 0;
-        else
             medial_left = 1;
-            angle_rot = angle_rot + pi();
+            angle_rot = atan2(delta_y, delta_x)-tangle;
+        else
+            medial_left = 0;
+            angle_rot = atan2(delta_y, delta_x)-pi();
         end
     end
 
@@ -401,7 +402,7 @@ function [mask] = get_mask(name,default_directory)
     slices = length(files);
     mask = dicomread(strcat(chdir,'\',files(1).name));
     mask(end,end,slices)=0; %pre allocate
-    for i = 2:slices
+    for i = 1:slices
         mask(:,:,i) = dicomread(strcat(chdir,'\',files(i).name));
     end
 end
