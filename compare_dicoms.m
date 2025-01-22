@@ -11,6 +11,7 @@
 %
 % Written by Andrew Wilzman and Karen Troy 06/2023
 % Updated 12/13/2024
+% Updated 01/22/2025
 % Example run:
 % calibrate_slope = 0.00035619;
 % calibrate_int = -0.00365584; 
@@ -64,7 +65,7 @@ function [tv, bv, bmc, bmd, medial_left, angle_rot] = compare_dicoms(default_dir
         end
         
         raw_image = dicomread(full_dicom_path);
-        raw_image_b = raw_image > 1.5 / calibrate_slope;
+        raw_image_b = raw_image > 1.3 / calibrate_slope;
         raw_image_b = logical(raw_image_b);
         stats = regionprops(raw_image_b, 'Area', 'Centroid');
         min_area_threshold = 5000;
@@ -75,6 +76,7 @@ function [tv, bv, bmc, bmd, medial_left, angle_rot] = compare_dicoms(default_dir
         idx_fibula = sorted_idx(2);
         tibia_centroid = stats(idx_tibia).Centroid; 
         fibula_centroid = stats(idx_fibula).Centroid;
+
         delta_y = fibula_centroid(2) - tibia_centroid(2);
         delta_x = fibula_centroid(1) - tibia_centroid(1);
         % Angle calculation
@@ -85,7 +87,7 @@ function [tv, bv, bmc, bmd, medial_left, angle_rot] = compare_dicoms(default_dir
             angle_rot = atan2(delta_y, delta_x)-tangle;
         else
             medial_left = 0;
-            angle_rot = atan2(delta_y, delta_x)-pi();
+            angle_rot = atan2(delta_y, delta_x)-pi()-tangle;
         end
     end
 
@@ -325,7 +327,6 @@ end
 function [tv, bv, bmc, bmd] = bv_bmc(mask, res, slope, int)
     tv = 0;    
     bv = 0;
-    bmd = 0;
     bmc = 0;
     
     vox_ed = res / 10000.0; % um to cm
