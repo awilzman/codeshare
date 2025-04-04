@@ -3,9 +3,9 @@ clear;  % Clear workspace
 % Initial Setup
 subs = ["55","440","504","509","521","522","524"];  % List of subjects
 directory = '';  % Directory of DICOM files (end slash is important)
-res = 82;  % Image resolution (in micrometers)
-calibrate_slope = 0.000379;
-calibrate_int = -0.00603;
+res = 61;  % Image resolution (in micrometers)
+calibrate_slope = 0.000378958;
+calibrate_int = -0.006032533;
 excelFileName = 'output.xlsx';  % Output file name
 
 columns = ["Anterior", "Posterior", "Medial", "Lateral"]; 
@@ -20,7 +20,9 @@ mask2s = cell(length(subs), 2);  % Preallocate for mask2s
 
 % Loop over subjects
 for s = 1:length(subs)
+    %
     subjects = strcat(subs(s), [" 4 ", " 30 "]);
+    %
     angle_rot = 0;
     medial_left = 0;
     
@@ -31,12 +33,11 @@ for s = 1:length(subs)
         mask2s{s, i} = strcat(subjects(i), 'scan2');   % Mask 2 name
          
         disp("Running " + subjects(i));  % Log current subject
-        
-        % Compare DICOMs and store results
         try
+        % Compare DICOMs and store results
             % Each feature is now a 3x4 table
             [tv, bv, bmc, bmd, medial_left, angle_rot] = ...
-                compare_dicoms(directory, res, output{s, i, 1}, mask1s{s, i}, mask2s{s, i}, ...
+                compare_dicoms(directory, res, mask1s{s, i}, mask2s{s, i}, ...
                 calibrate_slope, calibrate_int, medial_left, angle_rot);
             
             % Store 3x4 tables for each feature
@@ -44,10 +45,10 @@ for s = 1:length(subs)
             output{s, i, 3} = bv;   % 3x4 table for bv
             output{s, i, 4} = bmc;  % 3x4 table for bmc
             output{s, i, 5} = bmd;  % 3x4 table for bmd
-            
         catch
-            disp(['No data for ' + subjects(i)]);
+            disp('error')
         end
+        
     end
 end
 
