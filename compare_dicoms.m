@@ -10,7 +10,7 @@
 % Difference    % (3,1)             % (3,2)             % (3,3)            % (3,4)
 %
 % Written by Andrew Wilzman and Karen Troy 06/2023
-% Updated 12/13/2024
+% Updated 04/07/2025
 % Example run:
 % calibrate_slope = 0.00035619;
 % calibrate_int = -0.00365584; 
@@ -42,9 +42,13 @@ function [tv, bv, bmc, bmd, medial_left, angle_rot] = compare_dicoms(default_dir
     mask_1 = pad_3dmat(mask_1);
     mask_2 = pad_3dmat(mask_2);
 
-    tangle = pi()/4;
+    tangle = pi/4;
 
     bone_threshold = 0.5/calibrate_slope;
+    threshold_step = 0.01 / calibrate_slope;
+    max_iter = 100;
+    iter = 0;
+
     mask_1(mask_1 < bone_threshold) = 0;
     mask_2(mask_2 < bone_threshold) = 0;
 
@@ -67,30 +71,44 @@ function [tv, bv, bmc, bmd, medial_left, angle_rot] = compare_dicoms(default_dir
         info = dicominfo(full_dicom_path);
         raw_image = raw_image * info.RescaleSlope + info.RescaleIntercept;
 
-        raw_image_b = raw_image > bone_threshold;
-        raw_image_b = logical(raw_image_b);
-        stats = regionprops(raw_image_b, 'Area', 'Centroid');
-        min_area_threshold = 5000;
-        stats = stats([stats.Area] > min_area_threshold);
+        while true
+            raw_image_b = raw_image > bone_threshold;
+            raw_image_b = logical(raw_image_b);
+        
+            stats = regionprops(raw_image_b, 'Area', 'Centroid');
+            stats = stats([stats.Area] > 5000);
+        
+            if numel(stats) == 2 || iter >= max_iter
+                break;
+            end
+        
+            bone_threshold = bone_threshold + threshold_step;
+            iter = iter + 1;
+        end
+        
+        if numel(stats) ~= 2
+            error('Failed to isolate exactly two regions after threshold tuning.');
+        end
+        
         areas = [stats.Area];
         [~, sorted_idx] = sort(areas, 'descend');
         idx_tibia = sorted_idx(1);
-        idx_fibula = sorted_idx(2);
-
-        tibia_centroid = stats(idx_tibia).Centroid; 
+        idx_fibula = sorted_idx(end);
+        
+        tibia_centroid = stats(idx_tibia).Centroid;
         fibula_centroid = stats(idx_fibula).Centroid;
 
-        delta_y = fibula_centroid(2) - tibia_centroid(2);
-        delta_x = fibula_centroid(1) - tibia_centroid(1);
-        % Angle calculation
-        
+        delta_y = fibula_centroid(1) - tibia_centroid(1);
+        delta_x = fibula_centroid(2) - tibia_centroid(2);
+
         % Medial side calculation
-        if tibia_centroid(1) < fibula_centroid(1)
-            medial_left = 1;
-            angle_rot = atan2(delta_y, delta_x)-tangle;
+        medial_left = tibia_centroid(2) >= fibula_centroid(2);
+
+        % Angle calculation
+        if medial_left
+            angle_rot = atan2(delta_y, delta_x)-pi;
         else
-            medial_left = 0;
-            angle_rot = atan2(delta_y, delta_x)-pi()-tangle;
+            angle_rot = atan2(delta_y, delta_x)-tangle-pi;
         end
     end
 
@@ -305,35 +323,44 @@ function [tv, bv, bmc, bmd] = bv_bmc(mask, res, slope, int)
     end
 end
 
-function [new_mask] = rotate_mask(mask, rotationAngle, centroid, interpolationMethod)
-    % Input validation
-    assert(isnumeric(mask) && ndims(mask) >= 2, 'Input mask must be a numeric 2D or 3D array.');
-    assert(isscalar(rotationAngle), 'Rotation angle must be a scalar.');
-    
-    % Set default interpolation method
+function new_mask = rotate_mask(mask, rotationAngle, centroid, interpolationMethod)
+    assert(isnumeric(mask) && ndims(mask) >= 2, 'Input must be numeric 2D or 3D.');
+    assert(isscalar(rotationAngle), 'Rotation angle must be scalar.');
+
     if nargin < 4
         interpolationMethod = 'linear';
     end
-    % Precompute values
-    max_length = round(1.2 * sqrt(size(mask, 1)^2 + size(mask, 2)^2));
-    pad_LR = round((max_length - size(mask, 2)) / 2);
-    pad_TB = round((max_length - size(mask, 1)) / 2);
-    % Pad the mask
+
+    % Compute padded size
+    max_len = round(1.2 * hypot(size(mask,1), size(mask,2)));
+    pad_TB = round((max_len - size(mask,1)) / 2);
+    pad_LR = round((max_len - size(mask,2)) / 2);
+
+    % Pad
     mask = padarray(mask, [pad_TB, pad_LR], 0, 'both');
-    % Initialize the result
-    new_mask = zeros(size(mask));    
-    centroid(1) = centroid(1) + pad_TB;
-    centroid(2) = centroid(2) + pad_LR;
-    for channelIndex = 1:size(mask, 3)
-        matrix = double(mask(:, :, channelIndex));
-        [rows, cols] = size(matrix);        
-        [x, y] = meshgrid(1:cols, 1:rows);
-        x = x - centroid(1);
-        y = y - centroid(2);        
-        x_rot = x * cos(rotationAngle) - y * sin(rotationAngle);
-        y_rot = x * sin(rotationAngle) + y * cos(rotationAngle);        
-        % Perform interpolation with specified method
-        new_mask(:, :, channelIndex) = interp2(x, y, matrix, x_rot, y_rot, interpolationMethod);
+    new_mask = zeros(size(mask));
+
+    % Adjust centroid
+    cy = centroid(1) + pad_TB;
+    cx = centroid(2) + pad_LR;
+
+    [rows, cols, slices] = size(mask);
+    [X, Y] = meshgrid(1:cols, 1:rows);
+
+    % Center relative to centroid
+    x = X - cx;
+    y = Y - cy;
+
+    % Inverse rotation matrix
+    x_r =  x * cos(rotationAngle) + y * sin(rotationAngle);
+    y_r = -x * sin(rotationAngle) + y * cos(rotationAngle);
+
+    % Map back to original coordinates
+    xq = x_r + cx;
+    yq = y_r + cy;
+
+    for k = 1:slices
+        new_mask(:,:,k) = interp2(double(mask(:,:,k)), xq, yq, interpolationMethod, 0);
     end
 end
 
@@ -368,62 +395,6 @@ function [mask] = get_mask(name, default_directory)
         img = double(dicomread(fullfile(chdir, files(i).name)));
         % Convert to Hounsfield Units
         mask(:, :, i) = img * info.RescaleSlope + info.RescaleIntercept;
-    end
-end
-
-function [ind] = pad_dim(dimension,mask,direction)
-    if direction > 0
-        if dimension == 3
-            for i = 1:size(mask,dimension)
-                if sum(mask(:,:,i),'all') == 0
-                    continue
-                end
-                ind = i;
-                break
-            end
-        elseif dimension == 2
-            for i = 1:size(mask,dimension)
-                if sum(mask(:,i,:),'all') == 0
-                    continue
-                end
-                ind = i;
-                break
-            end 
-        elseif dimension == 1
-            for i = 1:size(mask,dimension)
-                if sum(mask(i,:,:),'all') == 0
-                    continue
-                end
-                ind = i;
-                break
-            end
-        end
-    else 
-        if dimension == 3
-            for i = 1:size(mask,dimension)
-                if sum(mask(:,:,end-(i-1)),'all') == 0
-                    continue
-                end
-                ind = i;
-                break
-            end
-        elseif dimension == 2
-            for i = 1:size(mask,dimension)
-                if sum(mask(:,end-(i-1),:),'all') == 0
-                    continue
-                end
-                ind = i;
-                break
-            end 
-        elseif dimension == 1
-            for i = 1:size(mask,dimension)
-                if sum(mask(end-(i-1),:,:),'all') == 0
-                    continue
-                end
-                ind = i;
-                break
-            end
-        end
     end
 end
 
