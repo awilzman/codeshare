@@ -10,7 +10,7 @@
 % Difference    % (3,1)             % (3,2)             % (3,3)            % (3,4)
 %
 % Written by Andrew Wilzman and Karen Troy 06/2023
-% Updated 04/07/2025
+% Updated by Karen Troy 5/2025
 % Example run:
 % calibrate_slope = 0.00035619;
 % calibrate_int = -0.00365584; 
@@ -18,6 +18,10 @@
 % [bv,bmc,bmd,medial_left,angle_rot] = compare_dicoms(default_directory,res,LCV_name,
 % mask1_name,mask2_name,calibrate_slope,calibrate_int,
 % medial_left,angle_rot,first_full_slice)
+
+% This version updated by Karen Troy to import the full grayscale mask of
+% the segmented bone ([filename.AIM], to calulate BMD including marrow
+% space.  Note that time 2 AIM files must be transformed prior to import.
 
 % T. Hildebrand, A. Laib, R. Müller, J. Dequecker, P. Rüegsegger. 
 % Direct 3-D morphometric analysis of human cancellous bone: 
@@ -34,13 +38,28 @@ function [tv, bv, bmc, bmd, medial_left, angle_rot] = compare_dicoms(default_dir
         medial_left = 0;
     end
 
+    %printmasks option added to display slice 10  (line 204) - added by KLT
+    printmasks=0;
+    se = offsetstrel("ball",15,15); %shape for closing images later on
+
     %mask_LCV = get_mask(LCV_name,default_directory);
     mask_1 = get_mask(mask1_name,default_directory);
     mask_2 = get_mask(mask2_name,default_directory);
     
+    %open full AIM files under a related variable name
+    dir_path = strcat(chdir,'\',mask1_name,'_aim');
+    mask_1fill=get_mask( '\', dir_path);
+    dir_path = strcat(chdir,'\',mask2_name,'_aim');
+    mask_2fill=get_mask( '\', dir_path);
+    
     % un-Pad matrices
     mask_1 = pad_3dmat(mask_1);
     mask_2 = pad_3dmat(mask_2);
+
+    %mask_2fill has an extra layer of zeros around all 4 edges compared to
+    %mask_2. We need to remove them.
+    mask_2fill = reduce_3dmat(mask_2fill);
+    mask_2fill = padarray(mask_2fill,[0,0,1]); %add slice to top and bottom to match mask_2 dims
 
     tangle = pi/4;
 
@@ -48,10 +67,25 @@ function [tv, bv, bmc, bmd, medial_left, angle_rot] = compare_dicoms(default_dir
     threshold_step = 0.01 / calibrate_slope;
     max_iter = 100;
     iter = 0;
+    
+        mask_1(mask_1 < 100) = 0;
+        mask_2(mask_2 < 100) = 0;
 
-    mask_1(mask_1 < bone_threshold) = 0;
-    mask_2(mask_2 < bone_threshold) = 0;
+    % fill in the holes of mask 1 and mask 2 and get the marrow gray values
+    % from the aim files.
+    bw=imclose(mask_1,se);
+    bw(bw <100) = 0;
+    bw(bw >=100) = 1;
+    mask_1fill=bw.*mask_1fill;
+    %figure; imshowpair(mask_1(:,:,40),mask_1fill(:,:,40),'montage');
 
+    bw=imclose(mask_2,se);
+    bw(bw <100) = 0;
+    bw(bw >=100) = 1;
+    mask_2fill=bw.*mask_2fill;
+    %figure; imshowpair(mask_2(:,:,40),mask_2fill(:,:,40),'montage);
+    clear bw;
+    
     if angle_rot==0
         %threshold image
         %classify tibia and fibula by size (larger = tibia)
@@ -85,7 +119,9 @@ function [tv, bv, bmc, bmd, medial_left, angle_rot] = compare_dicoms(default_dir
             bone_threshold = bone_threshold + threshold_step;
             iter = iter + 1;
         end
-        
+        disp(bone_threshold);
+        figure; imshow(raw_image_b)
+
         if numel(stats) ~= 2
             error('Failed to isolate exactly two regions after threshold tuning.');
         end
@@ -137,9 +173,13 @@ function [tv, bv, bmc, bmd, medial_left, angle_rot] = compare_dicoms(default_dir
 
     mask_1 = rotate_mask(mask_1,angle_rot,ccenter);
     mask_2 = rotate_mask(mask_2,angle_rot,ccenter);
+    mask_1fill = rotate_mask(mask_1fill,angle_rot,ccenter);
+    mask_2fill = rotate_mask(mask_2fill,angle_rot,ccenter);
     
-    mask_1 = pad_3dmat(mask_1);
+    mask_1 = pad_3dmat(mask_1);  %crop to bone mask
     mask_2 = pad_3dmat(mask_2);
+    mask_1fill = pad_3dmat(mask_1fill);
+    mask_2fill = pad_3dmat(mask_2fill);
 
     % Calculate metrics
     tv = zeros(3,4);
@@ -158,6 +198,18 @@ function [tv, bv, bmc, bmd, medial_left, angle_rot] = compare_dicoms(default_dir
     mask_2_post = zeros(size(mask_2));
     mask_2_lat = zeros(size(mask_2));
     
+    % do the same for the filled mask. there's almost certainly a more
+    % efficient way to do this, but I can't think of it now.
+    mask_1f_med = zeros(size(mask_1fill));
+    mask_1f_ant = zeros(size(mask_1fill));
+    mask_1f_post = zeros(size(mask_1fill));
+    mask_1f_lat = zeros(size(mask_1fill));
+    
+    mask_2f_med = zeros(size(mask_2fill));
+    mask_2f_ant = zeros(size(mask_2fill));
+    mask_2f_post = zeros(size(mask_2fill));
+    mask_2f_lat = zeros(size(mask_2fill));
+    
     % Iterate through slices
 
     med_s = 4;
@@ -168,34 +220,66 @@ function [tv, bv, bmc, bmd, medial_left, angle_rot] = compare_dicoms(default_dir
         lat_s = 4;
     end
 
+    %recalculate center after padding
+    z_center = round(size(mask_1, 3) / 2); % Middle slice index
+    center_slice = mask_1(:, :, z_center); % 2D slice along Z axis
+    non_zero_voxels_2D = center_slice > 0;
+    filled_slice = imfill(non_zero_voxels_2D, 'holes');
+    [rows, cols] = find(filled_slice); 
+
+    x = mean(cols);
+    y = mean(rows);
+
     for z = 1:size(mask_1, 3)
         % Generate binary wedge masks for the current slice
-        wedge_masks_1 = generateWedgeMasks(mask_1(:,:,z));
-        wedge_masks_2 = generateWedgeMasks(mask_2(:,:,z));
+        wedge_masks_1f= generateWedgeMasks(mask_1fill(:,:,z),x,y);
+        wedge_masks_2f= generateWedgeMasks(mask_2fill(:,:,z),x,y);
 
         mask_1_slice = double(mask_1(:,:,z));
         mask_2_slice = double(mask_2(:,:,z));
     
         % Apply the binary wedge masks to extract the original values
-        mask_1_med(:,:,z) = max(mask_1_slice .* double(wedge_masks_1(:,:,med_s)), double(wedge_masks_1(:,:,med_s)));
-        mask_1_ant(:,:,z) = max(mask_1_slice .* double(wedge_masks_1(:,:,2)), double(wedge_masks_1(:,:,2)));
-        mask_1_post(:,:,z) = max(mask_1_slice .* double(wedge_masks_1(:,:,3)), double(wedge_masks_1(:,:,3)));
-        mask_1_lat(:,:,z) = max(mask_1_slice .* double(wedge_masks_1(:,:,lat_s)), double(wedge_masks_1(:,:,lat_s)));
+        mask_1_med(:,:,z) = mask_1_slice.*double(wedge_masks_1f(:,:,med_s));
+        mask_1_ant(:,:,z) = mask_1_slice.*double(wedge_masks_1f(:,:,2));
+        mask_1_post(:,:,z) = mask_1_slice.*double(wedge_masks_1f(:,:,3));
+        mask_1_lat(:,:,z) = mask_1_slice.*double(wedge_masks_1f(:,:,lat_s));
+
+        mask_2_med(:,:,z) = mask_2_slice.*double(wedge_masks_2f(:,:,med_s));
+        mask_2_ant(:,:,z) = mask_2_slice.*double(wedge_masks_2f(:,:,2));
+        mask_2_post(:,:,z) = mask_2_slice.*double(wedge_masks_2f(:,:,3));
+        mask_2_lat(:,:,z) = mask_2_slice.*double(wedge_masks_2f(:,:,lat_s));
+
+        % Do the same for the filled masks so that we can calculate BMD
+        mask_1_slice = double(mask_1fill(:,:,z));
+        mask_2_slice = double(mask_2fill(:,:,z));
     
-        mask_2_med(:,:,z) = max(mask_2_slice .* double(wedge_masks_2(:,:,med_s)), double(wedge_masks_2(:,:,med_s)));
-        mask_2_ant(:,:,z) = max(mask_2_slice .* double(wedge_masks_2(:,:,2)), double(wedge_masks_2(:,:,2)));
-        mask_2_post(:,:,z) = max(mask_2_slice .* double(wedge_masks_2(:,:,3)), double(wedge_masks_2(:,:,3)));
-        mask_2_lat(:,:,z) = max(mask_2_slice .* double(wedge_masks_2(:,:,lat_s)), double(wedge_masks_2(:,:,lat_s)));
+        % Apply the binary wedge masks to extract the original values
+        mask_1f_med(:,:,z) = mask_1_slice.*double(wedge_masks_1f(:,:,med_s));
+        mask_1f_ant(:,:,z) = mask_1_slice.*double(wedge_masks_1f(:,:,2));
+        mask_1f_post(:,:,z) = mask_1_slice.*double(wedge_masks_1f(:,:,3));
+        mask_1f_lat(:,:,z) = mask_1_slice.*double(wedge_masks_1f(:,:,lat_s));
+    
+        mask_2f_med(:,:,z) = mask_2_slice.*double(wedge_masks_2f(:,:,med_s));
+        mask_2f_ant(:,:,z) = mask_2_slice.*double(wedge_masks_2f(:,:,2));
+        mask_2f_post(:,:,z) = mask_2_slice.*double(wedge_masks_2f(:,:,3));
+        mask_2f_lat(:,:,z) = mask_2_slice.*double(wedge_masks_2f(:,:,lat_s));
     end
 
-    [tv(1,1), bv(1,1), bmc(1,1), bmd(1,1)] = bv_bmc(mask_1_ant,res,calibrate_slope,calibrate_int);
-    [tv(1,2), bv(1,2), bmc(1,2), bmd(1,2)] = bv_bmc(mask_1_post,res,calibrate_slope,calibrate_int);
-    [tv(1,3), bv(1,3), bmc(1,3), bmd(1,3)] = bv_bmc(mask_1_med,res,calibrate_slope,calibrate_int);
-    [tv(1,4), bv(1,4), bmc(1,4), bmd(1,4)] = bv_bmc(mask_1_lat,res,calibrate_slope,calibrate_int);
-    [tv(2,1), bv(2,1), bmc(2,1), bmd(2,1)] = bv_bmc(mask_2_ant,res,calibrate_slope,calibrate_int);
-    [tv(2,2), bv(2,2), bmc(2,2), bmd(2,2)] = bv_bmc(mask_2_post,res,calibrate_slope,calibrate_int);
-    [tv(2,3), bv(2,3), bmc(2,3), bmd(2,3)] = bv_bmc(mask_2_med,res,calibrate_slope,calibrate_int);
-    [tv(2,4), bv(2,4), bmc(2,4), bmd(2,4)] = bv_bmc(mask_2_lat,res,calibrate_slope,calibrate_int);
+    if printmasks==1
+        slice_mask = mask_1_ant(:,:,10)+mask_1_post(:,:,10)+mask_1_med(:,:,10)+mask_1_lat(:,:,10);
+        figure; imshow(slice_mask);
+        imwrite(slice_mask,strcat(default_directory,mask1_name,"_maskslice10.png"));
+        imwrite(mask_1(:,:,10),strcat(default_directory,mask1_name,"_slice10.png"));
+    end
+
+    [tv(1,1), bv(1,1), bmc(1,1), bmd(1,1)] = bv_bmc(mask_1_ant,mask_1f_ant,res,calibrate_slope,calibrate_int);
+    [tv(1,2), bv(1,2), bmc(1,2), bmd(1,2)] = bv_bmc(mask_1_post,mask_1f_post,res,calibrate_slope,calibrate_int);
+    [tv(1,3), bv(1,3), bmc(1,3), bmd(1,3)] = bv_bmc(mask_1_med,mask_1f_med,res,calibrate_slope,calibrate_int);
+    [tv(1,4), bv(1,4), bmc(1,4), bmd(1,4)] = bv_bmc(mask_1_lat,mask_1f_lat,res,calibrate_slope,calibrate_int);
+    [tv(2,1), bv(2,1), bmc(2,1), bmd(2,1)] = bv_bmc(mask_2_ant,mask_2f_ant,res,calibrate_slope,calibrate_int);
+    [tv(2,2), bv(2,2), bmc(2,2), bmd(2,2)] = bv_bmc(mask_2_post,mask_2f_post,res,calibrate_slope,calibrate_int);
+    [tv(2,3), bv(2,3), bmc(2,3), bmd(2,3)] = bv_bmc(mask_2_med,mask_2f_med,res,calibrate_slope,calibrate_int);
+    [tv(2,4), bv(2,4), bmc(2,4), bmd(2,4)] = bv_bmc(mask_2_lat,mask_2f_lat,res,calibrate_slope,calibrate_int);
     tv(3,1) = tv(2,1)-tv(1,1);
     tv(3,2) = tv(2,2)-tv(1,2);
     tv(3,3) = tv(2,3)-tv(1,3);
@@ -212,15 +296,6 @@ function [tv, bv, bmc, bmd, medial_left, angle_rot] = compare_dicoms(default_dir
     bmd(3,2) = bmd(2,2)-bmd(1,2);
     bmd(3,3) = bmd(2,3)-bmd(1,3);
     bmd(3,4) = bmd(2,4)-bmd(1,4);
-    
-    z_center = round(size(mask_1, 3) / 2); % Middle slice index
-    center_slice = mask_1(:, :, z_center); % 2D slice along Z axis
-    non_zero_voxels_2D = center_slice > 0;
-    filled_slice = imfill(non_zero_voxels_2D, 'holes');
-    [rows, cols] = find(filled_slice); 
-
-    x = mean(cols);
-    y = mean(rows);
 
     slice_image = mask_1(:,:,round(size(mask_1,3)/2));
     [rows, cols] = size(slice_image);
@@ -233,7 +308,6 @@ function [tv, bv, bmc, bmd, medial_left, angle_rot] = compare_dicoms(default_dir
     line_mask = abs(yGrid - ((1/(-ap_slope + 1e-6)) * (xGrid - x) + y)) < 1;
     slice_image(line_mask) = max(slice_image(:));
 
-    slice_image = uint16(slice_image);
     imwrite(slice_image,strcat(default_directory,mask1_name,".png"))
 
     color_ant = [255, 0, 0];   % Red for anterior
@@ -242,7 +316,7 @@ function [tv, bv, bmc, bmd, medial_left, angle_rot] = compare_dicoms(default_dir
     color_lat = [255, 255, 0]; % Yellow for lateral
     slice_image_rgb = zeros([size(slice_image), 3], 'uint8');
     
-    for z = 1:size(mask_1, 3)
+    for z = round(size(mask_1,3)/2) % 1:size(mask_1, 3)  -- this variable changed by KLT to only print the center slice for comparison
         % Anterior section
         slice_image_rgb(:,:,1) = slice_image_rgb(:,:,1) + uint8(mask_1_ant(:,:,z)) * color_ant(1);
         slice_image_rgb(:,:,2) = slice_image_rgb(:,:,2) + uint8(mask_1_ant(:,:,z)) * color_ant(2);
@@ -277,41 +351,46 @@ function totalArea = calculateFilledArea(array)
     binary_image = array > 0;
 
     % Perform morphological closing to fill small gaps
-    se = strel('disk', 5);  % Adjust structuring element as needed
+    se = strel('disk', 15);  % Adjust structuring element as needed
     closed_image = imclose(binary_image, se);
+    closed_image(closed_image<20) = 0;
 
     % Calculate total filled area directly
     totalArea = sum(closed_image(:)); % Counts nonzero pixels (alternative to polyarea)
 end
 
-
-function [tv, bv, bmc, bmd] = bv_bmc(mask, res, slope, int)
+function [tv, bv, bmc, bmd] = bv_bmc(mask1,maskf, res, slope, int)
+%mask1 = trabec segmented mask for bv, maskf = filled mask for other params    
     tv = 0;    
     bv = 0;
     bmc = 0;
 
     vox_ed = res / 10000.0; % Convert um to cm
 
-    for z = 1:size(mask, 3)
-        slice = double(mask(:, :, z));
-        area = calculateFilledArea(slice);
+    for z = 1:size(mask1, 3)
+        slicef = double(maskf(:, :, z));
+        slice = double(mask1(:,:,z));
+        areaf = nnz(slicef);
+        areab = nnz(slice);
 
         % Skip empty slices
-        if area == 0
+        if areaf == 0
             continue;
         end
 
-        vol = area * vox_ed^3;
-        bv_vol = nnz(slice > 1) * vox_ed^3;
+        bv_vol = areab * vox_ed^3;
+        tv_vol = areaf * vox_ed^3;
 
         if bv_vol == 0
             continue;
         end
+        %set non-bone values to -10000 so that we don't measure them
+        slicef(slicef==0)=-10000;
+        meanHU=mean(slicef(slicef > -9999), 'all')
+        slice_density = mean(slicef(slicef > -9999), 'all') * slope + int;
+        slice_content = slice_density * tv_vol;
 
-        slice_density = mean(slice(slice > 1), 'all') * slope + int;
-        slice_content = slice_density * bv_vol;
-
-        tv = tv + vol; % Total Volume
+        tv = tv + tv_vol; % Total Volume
         bv = bv + bv_vol; % Bone Volume
         bmc = bmc + slice_content;
     end
@@ -378,6 +457,20 @@ function red_mask = pad_3dmat(mask)
     red_mask = mask(x1:x2, y1:y2, z1:z2);
 end
 
+function smaller_mask = reduce_3dmat(mask)
+    % Trim a mask by 1 on each edge
+    mask(isnan(mask)) = 0;
+    [x, y, z] = ind2sub(size(mask), find(mask));
+    
+    % Compute bounds
+    x1 = min(x); x2 = max(x);
+    y1 = min(y); y2 = max(y);
+    z1 = min(z); z2 = max(z);
+    
+    % Crop to bounding box
+    smaller_mask = mask(x1+1:x2-1, y1+1:y2-1, z1:z2);
+end
+
 function [mask] = get_mask(name, default_directory)
     chdir = strcat(default_directory, name);
     files = dir(fullfile(chdir, '*.DCM*'));
@@ -398,13 +491,13 @@ function [mask] = get_mask(name, default_directory)
     end
 end
 
-function wedge_masks = generateWedgeMasks(mask)
+function wedge_masks = generateWedgeMasks(mask,cx,cy)
     % Ensure binary mask
     mask = logical(mask);
     
     [rows, cols] = size(mask); % Get image dimensions
-    cx = round(cols / 2); % X center
-    cy = round(rows / 2); % Y center
+    cx = round(cx); % X center
+    cy = round(cy); % Y center
 
     % Define angular segments (4 quadrants)
     num_wedges = 4;

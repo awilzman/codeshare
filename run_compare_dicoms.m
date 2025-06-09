@@ -1,7 +1,7 @@
 clear;  % Clear workspace
 
 % Initial Setup
-subs = ["55","440","504","509","521","522","524"];  % List of subjects "55","440","504","509","521","522","524"
+subs = ["524"];  % List of subjects "55","440","504","509","521","522","524"
 directory = '';  % Directory of DICOM files (end slash is important)
 res = 61;  % Image resolution (in micrometers)
 calibrate_slope = 0.000378958;
@@ -45,8 +45,12 @@ for s = 1:length(subs)
             output{s, i, 3} = bv;   % 3x4 table for bv
             output{s, i, 4} = bmc;  % 3x4 table for bmc
             output{s, i, 5} = bmd;  % 3x4 table for bmd
-        catch
-            disp('error')
+        catch e
+            fprintf(1,'The identifier was:\n%s',e.identifier);
+            fprintf(1,'There was an error! The message was:\n%s',e.message)
+            fprintf(1,'The cause is:\n%s')
+            e.stack.name
+            e.stack.line
         end
 
     end
